@@ -1,0 +1,155 @@
+# Ablation Study Configuration
+# Defines multiple experiments to compare different configurations
+
+ablation_study:
+  name: "lfn_ablation_study"
+  base_config: "experiments/configs/default.yaml"
+  output_dir: "experiments/results/ablation"
+
+# Experiment variations to run
+experiments:
+  # Baseline: Standard Transformer without latent forecasting
+  - name: "baseline_no_latent_loss"
+    description: "Standard Transformer (lambda=0)"
+    overrides:
+      experiment:
+        name: "baseline_no_latent"
+      training:
+        lambda_latent: 0.0
+
+  # Ablation 1: Different lambda values
+  - name: "lambda_0.01"
+    description: "Low latent loss weight"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.01"
+      training:
+        lambda_latent: 0.01
+
+  - name: "lambda_0.05"
+    description: "Medium-low latent loss weight"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.05"
+      training:
+        lambda_latent: 0.05
+
+  - name: "lambda_0.1"
+    description: "Default latent loss weight"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.1"
+      training:
+        lambda_latent: 0.1
+
+  - name: "lambda_0.5"
+    description: "High latent loss weight"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.5"
+      training:
+        lambda_latent: 0.5
+
+  # Ablation 2: Different forecasting horizons
+  - name: "horizon_1"
+    description: "Single-step forecasting only"
+    overrides:
+      experiment:
+        name: "lfn_horizon_1"
+      model:
+        forecast_horizons: [1]
+
+  - name: "horizon_1_2"
+    description: "Two-step forecasting"
+    overrides:
+      experiment:
+        name: "lfn_horizon_1_2"
+      model:
+        forecast_horizons: [1, 2]
+
+  - name: "horizon_1_2_5"
+    description: "Multi-step forecasting (default)"
+    overrides:
+      experiment:
+        name: "lfn_horizon_1_2_5"
+      model:
+        forecast_horizons: [1, 2, 5]
+
+  - name: "horizon_1_2_5_10"
+    description: "Extended multi-step forecasting"
+    overrides:
+      experiment:
+        name: "lfn_horizon_1_2_5_10"
+      model:
+        forecast_horizons: [1, 2, 5, 10]
+
+  # Ablation 3: Different latent dimensions
+  - name: "latent_dim_256"
+    description: "Small latent dimension"
+    overrides:
+      experiment:
+        name: "lfn_latent_256"
+      model:
+        latent_dim: 256
+        num_heads: 4
+
+  - name: "latent_dim_512"
+    description: "Default latent dimension"
+    overrides:
+      experiment:
+        name: "lfn_latent_512"
+      model:
+        latent_dim: 512
+        num_heads: 8
+
+  - name: "latent_dim_1024"
+    description: "Large latent dimension"
+    overrides:
+      experiment:
+        name: "lfn_latent_1024"
+      model:
+        latent_dim: 1024
+        num_heads: 16
+
+  # Ablation 4: Different model depths
+  - name: "layers_4"
+    description: "Shallow model"
+    overrides:
+      experiment:
+        name: "lfn_layers_4"
+      model:
+        num_layers: 4
+
+  - name: "layers_6"
+    description: "Default depth"
+    overrides:
+      experiment:
+        name: "lfn_layers_6"
+      model:
+        num_layers: 6
+
+  - name: "layers_8"
+    description: "Deep model"
+    overrides:
+      experiment:
+        name: "lfn_layers_8"
+      model:
+        num_layers: 8
+
+# Comparison metrics to track
+comparison_metrics:
+  - "perplexity"
+  - "token_loss"
+  - "latent_loss"
+  - "lps_scores"
+  - "training_time"
+  - "gpu_memory_usage"
+
+# Visualization settings
+visualization:
+  generate_comparison_plots: true
+  plot_types:
+    - "perplexity_comparison"
+    - "lps_comparison"
+    - "loss_curves"
+    - "representation_metrics"

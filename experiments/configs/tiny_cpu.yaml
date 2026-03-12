@@ -1,0 +1,63 @@
+# Tiny Configuration for CPU Training
+# Optimized for fast iteration and validation without GPU
+
+experiment:
+  name: "tiny_cpu_experiment"
+  seed: 42
+  device: "cpu"  # Force CPU usage
+
+model:
+  vocab_size: 33278  # WikiText-2 vocabulary size
+  latent_dim: 256    # Reduced from 512 (50% reduction)
+  num_layers: 3      # Reduced from 6 (50% reduction)
+  num_heads: 4       # Reduced from 8 (50% reduction)
+  hidden_dim: 1024   # Reduced from 2048 (50% reduction)
+  dropout: 0.1
+  forecast_horizons: [1, 2]  # Reduced from [1, 2, 5] (fewer horizons)
+  max_context_length: 256    # Reduced from 512 (50% reduction)
+
+training:
+  num_epochs: 5              # Reduced from 10 (faster training)
+  batch_size: 4              # Small batch for CPU
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  gradient_accumulation_steps: 8  # Effective batch size = 32
+  max_grad_norm: 1.0
+  warmup_steps: 500          # Reduced from 1000
+  lambda_latent: 0.1         # Latent loss weight
+  use_mixed_precision: false # Must be false for CPU
+  checkpoint_every: 500      # Save checkpoints frequently
+  log_every: 50
+  validate_every: 1          # Validate every epoch
+
+data:
+  dataset_name: "wikitext-2"  # Smallest dataset
+  tokenizer_name: "gpt2"
+  context_length: 256         # Match model max_context_length
+  stride: 128                 # 50% overlap
+  batch_size: 4               # Match training batch_size
+  num_workers: 4              # Use CPU cores efficiently (adjust based on your CPU)
+
+optimizer:
+  type: "adamw"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+scheduler:
+  type: "cosine"
+  warmup_steps: 500
+  min_lr_ratio: 0.1
+
+# Paths
+paths:
+  checkpoints: "checkpoints/tiny_cpu"
+  logs: "experiments/logs/tiny_cpu"
+  results: "experiments/results/tiny_cpu"
+
+# Notes:
+# - This configuration is optimized for CPU training
+# - Expected training time: 10-15 hours on 8-core CPU
+# - Model size: ~15M parameters (vs. 50M for default small model)
+# - Use for validation and prototyping only
+# - For production experiments, use GPU with default.yaml
+

@@ -1,0 +1,68 @@
+# Docker Compose configuration for Latent Forecasting Network
+# Provides easy deployment with GPU support and volume mounts
+
+version: '3.8'
+
+services:
+  lfn-training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: latent-forecasting-network:latest
+    container_name: lfn-training
+    
+    # GPU support (requires nvidia-docker)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Volume mounts for persistence
+    volumes:
+      # Mount project code (for development)
+      - .:/workspace
+      # Mount data directory
+      - ./data:/workspace/data
+      # Mount checkpoints directory
+      - ./checkpoints:/workspace/checkpoints
+      # Mount experiment logs
+      - ./experiments/logs:/workspace/experiments/logs
+      # Mount experiment results
+      - ./experiments/results:/workspace/experiments/results
+    
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+      - TORCH_HOME=/workspace/.cache/torch
+      - HF_HOME=/workspace/.cache/huggingface
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Keep container running
+    stdin_open: true
+    tty: true
+    
+    # Default command
+    command: /bin/bash
+    
+    # Network mode
+    network_mode: host
+    
+    # Shared memory size (important for DataLoader with multiple workers)
+    shm_size: '8gb'
+
+  # Optional: TensorBoard service for monitoring
+  tensorboard:
+    image: tensorflow/tensorflow:latest
+    container_name: lfn-tensorboard
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./experiments/logs:/logs
+    command: tensorboard --logdir=/logs --host=0.0.0.0 --port=6006
+    network_mode: host

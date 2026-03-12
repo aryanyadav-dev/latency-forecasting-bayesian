@@ -1,0 +1,45 @@
+# Configuration for WikiText-103 (larger dataset)
+# Requires more training time and GPU memory
+
+experiment:
+  name: "lfn_wikitext103_medium"
+  seed: 42
+  output_dir: "experiments/results"
+
+model:
+  vocab_size: 50257  # GPT-2 tokenizer vocabulary size
+  latent_dim: 768
+  num_layers: 8
+  num_heads: 12
+  hidden_dim: 3072
+  dropout: 0.1
+  forecast_horizons: [1, 2, 5, 10]
+  max_context_length: 512
+
+data:
+  dataset_name: "wikitext-103-raw-v1"
+  tokenizer_name: "gpt2"
+  context_length: 512
+  stride: 256
+  batch_size: 16
+  num_workers: 4
+
+training:
+  num_epochs: 20
+  batch_size: 16
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  warmup_steps: 2000
+  lambda_latent: 0.1
+  use_mixed_precision: true
+  checkpoint_every: 2000
+  log_every: 100
+  device: "cuda"
+
+evaluation:
+  batch_size: 32
+  compute_lps: true
+  compute_representation_metrics: true
+  generate_visualizations: true

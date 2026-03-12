@@ -1,0 +1,123 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# PyTorch
+*.pt
+*.pth
+*.ckpt
+!experiments/configs/*.yaml
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and outputs
+experiments/logs/
+experiments/results/
+*.log
+events.out.tfevents.*
+*.csv
+
+# Checkpoints (keep directory structure, ignore model files)
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.ckpt
+!checkpoints/.gitkeep
+
+# Data cache
+.cache/
+data/cache/
+data/*.txt
+data/*.json
+data/*.parquet
+*.hdf5
+*.h5
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation
+docs/_build/
+
+# Kiro directory (CONFIDENTIAL - DO NOT PUSH)
+.kiro/
+
+# Research Paper Files (DO NOT PUSH)
+RESEARCH_PAPER.tex
+RESEARCH_PAPER.pdf
+RESEARCH.md
+*.tex
+*.bbl
+*.blg
+*.aux
+*.out
+*.synctex.gz
+
+# Diagrams (if you want to keep them private)
+diagrams/*.drawio
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment files
+.env
+.env.local
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
+
+# API Keys and Tokens
+*_token.txt
+*_key.txt
+api_keys/
+
+# Docker
+.dockerignore
+
+# TensorBoard
+runs/
+tensorboard/

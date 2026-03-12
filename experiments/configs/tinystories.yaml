@@ -1,0 +1,45 @@
+# Configuration for TinyStories dataset
+# Smaller model suitable for faster experimentation
+
+experiment:
+  name: "lfn_tinystories_small"
+  seed: 42
+  output_dir: "experiments/results"
+
+model:
+  vocab_size: 50257  # GPT-2 tokenizer vocabulary size
+  latent_dim: 384
+  num_layers: 4
+  num_heads: 6
+  hidden_dim: 1536
+  dropout: 0.1
+  forecast_horizons: [1, 2, 5]
+  max_context_length: 256
+
+data:
+  dataset_name: "roneneldan/TinyStories"
+  tokenizer_name: "gpt2"
+  context_length: 256
+  stride: 128
+  batch_size: 64
+  num_workers: 4
+
+training:
+  num_epochs: 5
+  batch_size: 64
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  warmup_steps: 500
+  lambda_latent: 0.1
+  use_mixed_precision: true
+  checkpoint_every: 500
+  log_every: 50
+  device: "cuda"
+
+evaluation:
+  batch_size: 128
+  compute_lps: true
+  compute_representation_metrics: true
+  generate_visualizations: true

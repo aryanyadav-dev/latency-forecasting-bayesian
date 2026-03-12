@@ -1,0 +1,45 @@
+# Default Configuration for Latent Forecasting Network
+# Dataset: WikiText-2 (small dataset for quick experiments)
+
+experiment:
+  name: "lfn_wikitext2_default"
+  seed: 42
+  output_dir: "experiments/results"
+
+model:
+  vocab_size: 50257  # GPT-2 tokenizer vocabulary size
+  latent_dim: 512
+  num_layers: 6
+  num_heads: 8
+  hidden_dim: 2048
+  dropout: 0.1
+  forecast_horizons: [1, 2, 5]
+  max_context_length: 512
+
+data:
+  dataset_name: "wikitext-2-raw-v1"
+  tokenizer_name: "gpt2"
+  context_length: 512
+  stride: 256
+  batch_size: 32
+  num_workers: 4
+
+training:
+  num_epochs: 10
+  batch_size: 32
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  warmup_steps: 1000
+  lambda_latent: 0.1
+  use_mixed_precision: true
+  checkpoint_every: 1000
+  log_every: 100
+  device: "cuda"
+
+evaluation:
+  batch_size: 64
+  compute_lps: true
+  compute_representation_metrics: true
+  generate_visualizations: true
