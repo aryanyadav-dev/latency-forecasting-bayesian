@@ -328,18 +328,5 @@ Due to computational resource constraints, the following experimental validation
 
 Expected results based on similar architectures suggest that latent forecasting should improve representation quality while maintaining competitive perplexity scores.
 
-## Contact
 
-For questions or issues, please open an issue on GitHub or contact [your-email@example.com].
 
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
