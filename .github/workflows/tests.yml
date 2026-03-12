@@ -1,10 +1,9 @@
-name: Tests
+name: Full Test Suite
 
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   test:
@@ -20,25 +19,32 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest pytest-cov
+        pip install flake8 pytest pytest-xdist
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install -e .
 
-    - name: Lint with flake8
+    - name: Lint with flake8 (critical errors only)
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
 
-    - name: Run tests with pytest
+    - name: Run tests with pytest (parallel)
       run: |
-        pytest tests/ -v --cov=models --cov=training --cov=evaluation --cov-report=xml
+        pytest tests/ -v -n auto --maxfail=5 --tb=short
 
-    - name: Check CLI starts
+    - name: Quick CLI check
       run: |
         python main.py --help
