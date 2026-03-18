@@ -394,7 +394,7 @@ def build_model(config: ModelConfig, device: str = "cuda") -> LatentForecastingM
     """
     # Validate preconditions
     config.validate()
-    assert device in ["cuda", "cpu"], f"Invalid device: {device}"
+    assert device in ["cuda", "cpu", "mps"], f"Invalid device: {device}"
     if device == "cuda":
         assert torch.cuda.is_available(), "CUDA not available"
 

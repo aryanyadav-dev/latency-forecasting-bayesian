@@ -48,7 +48,11 @@ def _load_config(config_path: str) -> Dict[str, Any]:
 def _resolve_device(requested: Optional[str]) -> str:
     """Return a valid torch device string."""
     if requested is None:
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            return "cuda"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
     if requested == "cuda" and not torch.cuda.is_available():
         logging.getLogger(__name__).warning(
             "CUDA requested but not available, falling back to CPU"
