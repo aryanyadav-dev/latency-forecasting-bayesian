@@ -6,9 +6,10 @@ This module implements language modeling metrics including:
 - Token accuracy
 - Complete language modeling evaluation
 - Latent representation analysis
+- Downstream task evaluation (linear probing)
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,18 @@ try:
     LATENT_ANALYSIS_AVAILABLE = True
 except ImportError:
     LATENT_ANALYSIS_AVAILABLE = False
+
+# Import downstream evaluation
+try:
+    from evaluation.downstream_eval import (
+        DownstreamEvaluator,
+        compute_effective_dimensionality,
+        extract_pooled_representations,
+    )
+
+    DOWNSTREAM_AVAILABLE = True
+except ImportError:
+    DOWNSTREAM_AVAILABLE = False
 
 
 def compute_perplexity(loss: Tensor) -> Tensor:
@@ -601,5 +614,133 @@ class Evaluator:
                 results["representation_metrics"] = rep_metrics
             except Exception as e:
                 print(f"Warning: Could not compute representation metrics: {e}")
+
+        return results
+
+    def compute_effective_dimensionality(
+        self, dataloader: DataLoader, max_samples: int = 5000
+    ) -> float:
+        """
+        Compute effective dimensionality of model representations.
+
+        Args:
+            dataloader: DataLoader for evaluation
+            max_samples: Maximum number of samples to use
+
+        Returns:
+            Effective dimensionality (participation ratio)
+        """
+        if not DOWNSTREAM_AVAILABLE:
+            raise ImportError(
+                "Downstream evaluation module not available. "
+                "Please ensure evaluation.downstream_eval is installed."
+            )
+
+        # Extract representations
+        reps, _ = extract_pooled_representations(
+            self.model, dataloader, self.device, pooling="mean"
+        )
+
+        # Limit samples if needed
+        if reps.size(0) > max_samples:
+            indices = torch.randperm(reps.size(0))[:max_samples]
+            reps = reps[indices]
+
+        return compute_effective_dimensionality(reps)
+
+    def evaluate_downstream(
+        self,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        test_loader: DataLoader,
+        num_classes: int,
+        task_name: str = "classification",
+        num_epochs: int = 10,
+    ) -> Dict[str, float]:
+        """
+        Evaluate model on downstream task via linear probing.
+
+        Args:
+            train_loader: Training data loader
+            val_loader: Validation data loader
+            test_loader: Test data loader
+            num_classes: Number of classes
+            task_name: Name of the task
+            num_epochs: Training epochs for linear probe
+
+        Returns:
+            Dictionary with downstream evaluation metrics
+        """
+        if not DOWNSTREAM_AVAILABLE:
+            raise ImportError(
+                "Downstream evaluation module not available. "
+                "Please ensure evaluation.downstream_eval is installed."
+            )
+
+        evaluator = DownstreamEvaluator(self.model, device=self.device)
+        return evaluator.evaluate_classification(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            test_loader=test_loader,
+            num_classes=num_classes,
+            task_name=task_name,
+            num_epochs=num_epochs,
+        )
+
+    def evaluate_model_extended(
+        self,
+        dataloader: DataLoader,
+        include_representation_analysis: bool = True,
+        include_downstream: bool = False,
+        downstream_loaders: Optional[Dict] = None,
+        max_samples: int = 10000,
+        n_clusters: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Extended comprehensive model evaluation with downstream tasks.
+
+        Args:
+            dataloader: DataLoader for main evaluation
+            include_representation_analysis: Whether to compute representation metrics
+            include_downstream: Whether to compute downstream metrics
+            downstream_loaders: Dict with 'train', 'val', 'test' loaders
+            max_samples: Maximum samples for representation analysis
+            n_clusters: Number of clusters for separability analysis
+
+        Returns:
+            Dictionary with all evaluation metrics including downstream
+        """
+        # Get base metrics
+        results = self.evaluate_model(
+            dataloader,
+            include_representation_analysis=include_representation_analysis,
+            max_samples=max_samples,
+            n_clusters=n_clusters,
+        )
+
+        # Add effective dimensionality
+        try:
+            results["effective_dimensionality"] = self.compute_effective_dimensionality(
+                dataloader, max_samples=max_samples
+            )
+        except Exception as e:
+            print(f"Warning: Could not compute effective dimensionality: {e}")
+
+        # Add downstream evaluation
+        if include_downstream and downstream_loaders is not None:
+            try:
+                num_classes = downstream_loaders.get("num_classes", 2)
+                task_name = downstream_loaders.get("task_name", "classification")
+
+                downstream_results = self.evaluate_downstream(
+                    train_loader=downstream_loaders["train"],
+                    val_loader=downstream_loaders["val"],
+                    test_loader=downstream_loaders["test"],
+                    num_classes=num_classes,
+                    task_name=task_name,
+                )
+                results["downstream"] = downstream_results
+            except Exception as e:
+                print(f"Warning: Could not compute downstream metrics: {e}")
 
         return results

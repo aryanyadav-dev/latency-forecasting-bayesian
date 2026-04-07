@@ -445,47 +445,386 @@ class Visualizer:
     # Ablation / comparison plots
     # ------------------------------------------------------------------ #
 
-    def plot_ablation_comparison(
+    def plot_lambda_ablation(
         self,
         results: Dict[str, Dict[str, float]],
         metric: str = "perplexity",
-        title: Optional[str] = None,
     ) -> Path:
         """
-        Plot comparison across ablation experiments.
+        Plot ablation study results for different lambda values.
+
+        Creates a line plot showing how a metric varies with lambda,
+        with lambda on a logarithmic scale.
 
         Args:
-            results: Dict mapping experiment name to metrics dict
-            metric: Metric name to compare
-            title: Optional plot title
+            results: Dict mapping experiment name (lambda_X.XX) to metrics dict
+            metric: Metric to plot (e.g., 'perplexity', 'linear_probe_accuracy')
 
         Returns:
             Path to saved plot
         """
-        names = list(results.keys())
-        values = [results[n].get(metric, 0.0) for n in names]
+        # Extract lambda values and corresponding metric values
+        lambda_values = []
+        metric_values = []
 
-        fig, ax = plt.subplots(figsize=(max(8, len(names)), 6))
-        bars = ax.bar(
-            range(len(names)), values, color="tab:blue", alpha=0.8, edgecolor="black"
+        for exp_name, metrics in results.items():
+            if exp_name.startswith("lambda_"):
+                try:
+                    lambda_val = float(exp_name.split("_")[1])
+                    if metric in metrics:
+                        lambda_values.append(lambda_val)
+                        metric_values.append(metrics[metric])
+                except (IndexError, ValueError):
+                    continue
+
+        if not lambda_values:
+            logger.warning("No lambda ablation results found")
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "No lambda ablation data", ha="center", va="center")
+            return self._save_figure(fig, f"lambda_ablation_{metric}.png")
+
+        # Sort by lambda
+        sorted_pairs = sorted(zip(lambda_values, metric_values))
+        lambda_values = [p[0] for p in sorted_pairs]
+        metric_values = [p[1] for p in sorted_pairs]
+
+        # Create plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(lambda_values, metric_values, marker="o", markersize=8, linewidth=2)
+        ax.set_xscale("log")
+        ax.set_xlabel("Lambda (log scale)")
+        ax.set_ylabel(metric.replace("_", " ").title())
+        ax.set_title(f"Effect of Lambda on {metric.replace('_', ' ').title()}")
+        ax.grid(True, alpha=0.3)
+
+        # Mark optimal point
+        if metric == "perplexity":
+            optimal_idx = min(range(len(metric_values)), key=lambda i: metric_values[i])
+        else:
+            optimal_idx = max(range(len(metric_values)), key=lambda i: metric_values[i])
+
+        ax.axvline(
+            lambda_values[optimal_idx],
+            color="red",
+            linestyle="--",
+            alpha=0.5,
+            label=f"Optimal λ={lambda_values[optimal_idx]:.3f}",
         )
+        ax.legend()
 
+        return self._save_figure(fig, f"lambda_ablation_{metric}.png")
+
+    def plot_horizon_ablation(
+        self,
+        results: Dict[str, Dict[str, float]],
+        metric: str = "perplexity",
+    ) -> Path:
+        """
+        Plot ablation study results for different horizon configurations.
+
+        Creates a bar plot comparing different horizon sets.
+
+        Args:
+            results: Dict mapping experiment name to metrics dict
+            metric: Metric to compare
+
+        Returns:
+            Path to saved plot
+        """
+        # Filter horizon experiments
+        horizon_experiments = {}
+        for exp_name, metrics in results.items():
+            if "horizon" in exp_name.lower() and metric in metrics:
+                # Extract horizon description
+                horizon_experiments[exp_name] = metrics[metric]
+
+        if not horizon_experiments:
+            logger.warning("No horizon ablation results found")
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "No horizon ablation data", ha="center", va="center")
+            return self._save_figure(fig, f"horizon_ablation_{metric}.png")
+
+        # Sort by metric value (ascending for perplexity, descending for accuracy)
+        if metric in ["perplexity", "token_loss"]:
+            sorted_items = sorted(horizon_experiments.items(), key=lambda x: x[1])
+        else:
+            sorted_items = sorted(horizon_experiments.items(), key=lambda x: -x[1])
+
+        names = [item[0] for item in sorted_items]
+        values = [item[1] for item in sorted_items]
+
+        # Create plot
+        fig, ax = plt.subplots(figsize=(max(10, len(names) * 0.8), 6))
+        colors = plt.cm.viridis(np.linspace(0, 1, len(names)))
+        bars = ax.bar(range(len(names)), values, color=colors, edgecolor="black")
+
+        # Add value labels
         for bar, val in zip(bars, values):
+            height = bar.get_height()
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                bar.get_height(),
+                height,
                 f"{val:.3f}",
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=9,
             )
 
         ax.set_xticks(range(len(names)))
         ax.set_xticklabels(names, rotation=45, ha="right")
         ax.set_ylabel(metric.replace("_", " ").title())
-        ax.set_title(title or f"Ablation Comparison: {metric}")
+        ax.set_title(f"Effect of Forecasting Horizons on {metric.replace('_', ' ').title()}")
         fig.tight_layout()
-        return self._save_figure(fig, f"ablation_{metric}.png")
+
+        return self._save_figure(fig, f"horizon_ablation_{metric}.png")
+
+    def plot_model_comparison(
+        self,
+        results: Dict[str, Dict[str, Any]],
+        metrics: List[str] = None,
+    ) -> List[Path]:
+        """
+        Create comprehensive comparison plots across multiple models.
+
+        Args:
+            results: Dict mapping model_type to evaluation results
+            metrics: List of metrics to compare (default: key metrics)
+
+        Returns:
+            List of saved plot paths
+        """
+        if metrics is None:
+            metrics = ["perplexity", "accuracy", "linear_probe_accuracy"]
+
+        saved = []
+
+        for metric in metrics:
+            # Collect data
+            model_names = []
+            metric_values = []
+
+            for model_name, model_results in results.items():
+                value = None
+
+                # Try to find metric in different nested structures
+                if metric in model_results:
+                    value = model_results[metric]
+                elif "language_modeling" in model_results:
+                    value = model_results["language_modeling"].get(metric)
+                elif "downstream" in model_results:
+                    value = model_results["downstream"].get(metric)
+
+                if value is not None and isinstance(value, (int, float)):
+                    model_names.append(model_name.upper())
+                    metric_values.append(value)
+
+            if not model_names:
+                continue
+
+            # Create comparison plot
+            fig, ax = plt.subplots(figsize=(max(8, len(model_names) * 1.2), 6))
+
+            # Color code: LFN in blue, baselines in gray, CPC/JEPA in different colors
+            colors = []
+            for name in model_names:
+                if "LFN" in name:
+                    colors.append("#1f77b4")  # Blue
+                elif "CPC" in name:
+                    colors.append("#ff7f0e")  # Orange
+                elif "JEPA" in name:
+                    colors.append("#2ca02c")  # Green
+                else:
+                    colors.append("#7f7f7f")  # Gray
+
+            bars = ax.bar(model_names, metric_values, color=colors, edgecolor="black")
+
+            # Add value labels
+            for bar, val in zip(bars, metric_values):
+                height = bar.get_height()
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    height,
+                    f"{val:.3f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                )
+
+            # Highlight best
+            if metric in ["perplexity", "token_loss"]:
+                best_idx = min(range(len(metric_values)), key=lambda i: metric_values[i])
+            else:
+                best_idx = max(range(len(metric_values)), key=lambda i: metric_values[i])
+
+            bars[best_idx].set_edgecolor("red")
+            bars[best_idx].set_linewidth(2)
+
+            ax.set_ylabel(metric.replace("_", " ").title())
+            ax.set_title(f"Model Comparison: {metric.replace('_', ' ').title()}")
+            plt.xticks(rotation=45, ha="right")
+            fig.tight_layout()
+
+            saved.append(self._save_figure(fig, f"model_comparison_{metric}.png"))
+
+        # Create combined multi-metric comparison
+        saved.append(self._plot_multi_metric_radar(results, metrics))
+
+        return saved
+
+    def _plot_multi_metric_radar(
+        self,
+        results: Dict[str, Dict[str, Any]],
+        metrics: List[str],
+    ) -> Path:
+        """
+        Create radar chart comparing models across multiple normalized metrics.
+
+        Args:
+            results: Dict mapping model_type to evaluation results
+            metrics: List of metrics to include
+
+        Returns:
+            Path to saved plot
+        """
+        from math import pi
+
+        # Collect and normalize metrics
+        model_data = {}
+        metric_ranges = {}
+
+        for metric in metrics:
+            values = []
+            for model_name, model_results in results.items():
+                value = None
+                if metric in model_results:
+                    value = model_results[metric]
+                elif "language_modeling" in model_results:
+                    value = model_results["language_modeling"].get(metric)
+                elif "downstream" in model_results:
+                    value = model_results["downstream"].get(metric)
+
+                if value is not None:
+                    values.append((model_name, value))
+
+            if values:
+                all_vals = [v[1] for v in values]
+                metric_ranges[metric] = (min(all_vals), max(all_vals))
+
+                for model_name, value in values:
+                    if model_name not in model_data:
+                        model_data[model_name] = {}
+                    # Normalize to [0, 1] (invert for perplexity/loss)
+                    min_val, max_val = metric_ranges[metric]
+                    if metric in ["perplexity", "token_loss"]:
+                        # Lower is better
+                        normalized = 1 - (value - min_val) / (max_val - min_val + 1e-8)
+                    else:
+                        # Higher is better
+                        normalized = (value - min_val) / (max_val - min_val + 1e-8)
+                    model_data[model_name][metric] = normalized
+
+        if len(model_data) < 2 or len(metric_ranges) < 2:
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "Insufficient data for radar chart", ha="center", va="center")
+            return self._save_figure(fig, "model_comparison_radar.png")
+
+        # Create radar chart
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+        # Number of variables
+        categories = list(metric_ranges.keys())
+        N = len(categories)
+
+        # Compute angle for each axis
+        angles = [n / float(N) * 2 * pi for n in range(N)]
+        angles += angles[:1]  # Complete the loop
+
+        # Plot each model
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#7f7f7f"]
+        for i, (model_name, data) in enumerate(model_data.items()):
+            values = [data.get(cat, 0.5) for cat in categories]
+            values += values[:1]  # Complete the loop
+
+            color = colors[i % len(colors)]
+            ax.plot(angles, values, "o-", linewidth=2, label=model_name, color=color)
+            ax.fill(angles, values, alpha=0.25, color=color)
+
+        # Add labels
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels([c.replace("_", " ").title() for c in categories])
+        ax.set_ylim(0, 1)
+        ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1))
+        ax.set_title("Multi-Metric Model Comparison (Normalized)", y=1.08)
+
+        return self._save_figure(fig, "model_comparison_radar.png")
+
+    def plot_downstream_comparison(
+        self,
+        results: Dict[str, Dict[str, float]],
+    ) -> Path:
+        """
+        Plot comparison of downstream task performance.
+
+        Args:
+            results: Dict mapping model_type to downstream results dict
+
+        Returns:
+            Path to saved plot
+        """
+        models = []
+        accuracies = []
+
+        for model_name, model_results in results.items():
+            if "linear_probe_accuracy" in model_results:
+                models.append(model_name.upper())
+                accuracies.append(model_results["linear_probe_accuracy"])
+
+        if not models:
+            logger.warning("No downstream results to plot")
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "No downstream data", ha="center", va="center")
+            return self._save_figure(fig, "downstream_comparison.png")
+
+        fig, ax = plt.subplots(figsize=(max(8, len(models) * 1.2), 6))
+
+        # Color coding
+        colors = []
+        for name in models:
+            if "LFN" in name:
+                colors.append("#1f77b4")
+            elif "CPC" in name:
+                colors.append("#ff7f0e")
+            elif "JEPA" in name:
+                colors.append("#2ca02c")
+            else:
+                colors.append("#7f7f7f")
+
+        bars = ax.bar(models, accuracies, color=colors, edgecolor="black")
+
+        # Add value labels
+        for bar, val in zip(bars, accuracies):
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                height,
+                f"{val:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+            )
+
+        # Highlight best
+        best_idx = max(range(len(accuracies)), key=lambda i: accuracies[i])
+        bars[best_idx].set_edgecolor("red")
+        bars[best_idx].set_linewidth(2)
+
+        ax.set_ylabel("Linear Probe Accuracy")
+        ax.set_title("Downstream Task Performance (Transfer Learning)")
+        ax.set_ylim([0, 1])
+        plt.xticks(rotation=45, ha="right")
+        fig.tight_layout()
+
+        return self._save_figure(fig, "downstream_comparison.png")
 
     # ------------------------------------------------------------------ #
     # Summary / orchestrator (7.5)

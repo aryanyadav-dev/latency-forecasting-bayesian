@@ -17,9 +17,17 @@ experiments:
       training:
         lambda_latent: 0.0
 
-  # Ablation 1: Different lambda values
+  # Ablation 1: Different lambda values (comprehensive)
+  - name: "lambda_0.0"
+    description: "No latent loss weight (baseline)"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.0"
+      training:
+        lambda_latent: 0.0
+
   - name: "lambda_0.01"
-    description: "Low latent loss weight"
+    description: "Very low latent loss weight"
     overrides:
       experiment:
         name: "lfn_lambda_0.01"
@@ -27,7 +35,7 @@ experiments:
         lambda_latent: 0.01
 
   - name: "lambda_0.05"
-    description: "Medium-low latent loss weight"
+    description: "Low latent loss weight"
     overrides:
       experiment:
         name: "lfn_lambda_0.05"
@@ -35,12 +43,20 @@ experiments:
         lambda_latent: 0.05
 
   - name: "lambda_0.1"
-    description: "Default latent loss weight"
+    description: "Medium latent loss weight (default)"
     overrides:
       experiment:
         name: "lfn_lambda_0.1"
       training:
         lambda_latent: 0.1
+
+  - name: "lambda_0.25"
+    description: "Medium-high latent loss weight"
+    overrides:
+      experiment:
+        name: "lfn_lambda_0.25"
+      training:
+        lambda_latent: 0.25
 
   - name: "lambda_0.5"
     description: "High latent loss weight"
@@ -50,17 +66,49 @@ experiments:
       training:
         lambda_latent: 0.5
 
-  # Ablation 2: Different forecasting horizons
-  - name: "horizon_1"
-    description: "Single-step forecasting only"
+  - name: "lambda_1.0"
+    description: "Very high latent loss weight (equal emphasis)"
+    overrides:
+      experiment:
+        name: "lfn_lambda_1.0"
+      training:
+        lambda_latent: 1.0
+
+  # Ablation 2: Different forecasting horizons (comprehensive)
+  - name: "horizon_1_only"
+    description: "Single-step forecasting (k=1)"
     overrides:
       experiment:
         name: "lfn_horizon_1"
       model:
         forecast_horizons: [1]
 
+  - name: "horizon_2_only"
+    description: "Single-step forecasting (k=2)"
+    overrides:
+      experiment:
+        name: "lfn_horizon_2"
+      model:
+        forecast_horizons: [2]
+
+  - name: "horizon_5_only"
+    description: "Single-step forecasting (k=5)"
+    overrides:
+      experiment:
+        name: "lfn_horizon_5"
+      model:
+        forecast_horizons: [5]
+
+  - name: "horizon_10_only"
+    description: "Single-step forecasting (k=10)"
+    overrides:
+      experiment:
+        name: "lfn_horizon_10"
+      model:
+        forecast_horizons: [10]
+
   - name: "horizon_1_2"
-    description: "Two-step forecasting"
+    description: "Two-step forecasting (k=1,2)"
     overrides:
       experiment:
         name: "lfn_horizon_1_2"
@@ -68,7 +116,7 @@ experiments:
         forecast_horizons: [1, 2]
 
   - name: "horizon_1_2_5"
-    description: "Multi-step forecasting (default)"
+    description: "Multi-step forecasting (k=1,2,5) - default"
     overrides:
       experiment:
         name: "lfn_horizon_1_2_5"
@@ -76,12 +124,20 @@ experiments:
         forecast_horizons: [1, 2, 5]
 
   - name: "horizon_1_2_5_10"
-    description: "Extended multi-step forecasting"
+    description: "Extended multi-step forecasting (k=1,2,5,10)"
     overrides:
       experiment:
         name: "lfn_horizon_1_2_5_10"
       model:
         forecast_horizons: [1, 2, 5, 10]
+
+  - name: "horizon_1_3_5_10_20"
+    description: "Long-range multi-step forecasting (k=1,3,5,10,20)"
+    overrides:
+      experiment:
+        name: "lfn_horizon_1_3_5_10_20"
+      model:
+        forecast_horizons: [1, 3, 5, 10, 20]
 
   # Ablation 3: Different latent dimensions
   - name: "latent_dim_256"
@@ -142,8 +198,15 @@ comparison_metrics:
   - "token_loss"
   - "latent_loss"
   - "lps_scores"
+  - "horizon_mse"
   - "training_time"
   - "gpu_memory_usage"
+  - "linear_probe_accuracy"  # New: downstream evaluation
+  - "representation_cka"     # New: representation similarity
+  - "latent_entropy"
+  - "latent_variance"
+  - "cosine_similarity_drift"
+  - "cluster_separability"
 
 # Visualization settings
 visualization:
@@ -153,3 +216,6 @@ visualization:
     - "lps_comparison"
     - "loss_curves"
     - "representation_metrics"
+    - "lambda_ablation_analysis"
+    - "horizon_ablation_analysis"
+    - "downstream_task_comparison"
