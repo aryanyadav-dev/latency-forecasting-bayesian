@@ -18,6 +18,13 @@ from data.tokenizer import load_tokenizer
 logger = logging.getLogger(__name__)
 
 
+PTB_DATA_FILES = {
+    "train": "https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.train.txt",
+    "validation": "https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.valid.txt",
+    "test": "https://raw.githubusercontent.com/wojzaremba/lstm/master/data/ptb.test.txt",
+}
+
+
 class SequenceDataset(Dataset):
     """
     Dataset for sequence modeling with sliding window chunking.
@@ -104,10 +111,11 @@ class SequenceDataset(Dataset):
             'wikitext-2': 'Salesforce/wikitext',
             'wikitext': 'Salesforce/wikitext',
             'wikitext-103': 'Salesforce/wikitext',
-            'ptb': 'ptb-text-only/ptb_text_only',
-            'penn-treebank': 'ptb-text-only/ptb_text_only',
-            'penn_treebank': 'ptb-text-only/ptb_text_only',
-            'ptb_text_only': 'ptb-text-only/ptb_text_only',
+            'ptb': 'text',
+            'penn-treebank': 'text',
+            'penn_treebank': 'text',
+            'ptb_text_only': 'text',
+            'ptb-text-only/ptb_text_only': 'text',
             'tinystories': 'roneneldan/TinyStories',
             'openwebtext': 'openwebtext'
         }
@@ -120,8 +128,8 @@ class SequenceDataset(Dataset):
                     config_name = 'wikitext-103-raw-v1'
                 else:
                     config_name = 'wikitext-2-raw-v1'
-            elif hf_dataset_name == 'ptb-text-only/ptb_text_only':
-                config_name = 'penn_treebank'
+            elif hf_dataset_name == 'text':
+                config_name = None
             else:
                 config_name = None
         else:
@@ -139,7 +147,15 @@ class SequenceDataset(Dataset):
         
         try:
             # Load dataset
-            if config_name:
+            if hf_dataset_name == 'text' and self.dataset_name.lower() in {
+                'ptb',
+                'penn-treebank',
+                'penn_treebank',
+                'ptb_text_only',
+                'ptb-text-only/ptb_text_only',
+            }:
+                dataset = load_dataset("text", data_files=PTB_DATA_FILES, split=hf_split)
+            elif config_name:
                 dataset = load_dataset(hf_dataset_name, config_name, split=hf_split)
             else:
                 dataset = load_dataset(hf_dataset_name, split=hf_split)
