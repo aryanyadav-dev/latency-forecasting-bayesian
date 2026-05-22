@@ -10,7 +10,7 @@ Usage:
     python run_multi_seed_experiment.py --experiment baseline --seeds 5 --epochs 3
     python run_multi_seed_experiment.py --experiment ablation_lambda --seeds 5
     python run_multi_seed_experiment.py --experiment ablation_horizon --seeds 5
-    python run_multi_seed_experiment.py --experiment dataset_scale --seeds 3 --dataset wikitext-103
+    python run_multi_seed_experiment.py --experiment dataset_scale --seeds 3 --dataset wikitext
 """
 
 import argparse
@@ -31,6 +31,29 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("multi_seed_experiment")
+
+
+DATASET_ALIASES = {
+    "wikitext": "wikitext-2",
+    "wikitext-2": "wikitext-2",
+    "wikitext-103": "wikitext-103",
+    "ptb": "ptb",
+    "ptb_text_only": "ptb",
+    "tinystories": "tinystories",
+}
+
+
+def normalize_dataset_name(dataset_name: str) -> str:
+    """Normalize CLI dataset aliases to loader names."""
+    try:
+        return DATASET_ALIASES[dataset_name.lower()]
+    except KeyError as exc:
+        valid = ", ".join(sorted(DATASET_ALIASES))
+        raise ValueError(f"Unknown dataset '{dataset_name}'. Expected one of: {valid}") from exc
+
+
+def dataset_slug(dataset_name: str) -> str:
+    return "wikitext" if dataset_name == "wikitext-2" else dataset_name.replace("-", "_")
 
 
 @dataclass
@@ -434,6 +457,24 @@ def compute_repr_metrics(flat_latents: np.ndarray, seq_latents: torch.Tensor) ->
     drift = 1.0 - cos_sim.mean().item()
     metrics["cosine_similarity_drift"] = drift
 
+    # Temporal linear CKA drift between adjacent latent states.
+    try:
+        x = a.reshape(-1, a.shape[-1]).float()
+        y = b.reshape(-1, b.shape[-1]).float()
+        if x.size(0) > 5000:
+            x = x[:5000]
+            y = y[:5000]
+        x = x - x.mean(dim=0, keepdim=True)
+        y = y - y.mean(dim=0, keepdim=True)
+        numerator = torch.linalg.matrix_norm(x.T @ y, ord="fro") ** 2
+        denominator = (
+            torch.linalg.matrix_norm(x.T @ x, ord="fro")
+            * torch.linalg.matrix_norm(y.T @ y, ord="fro")
+        )
+        metrics["cka_drift"] = float(1.0 - (numerator / denominator).clamp(0.0, 1.0).item()) if denominator.item() > 1e-12 else 0.0
+    except Exception:
+        metrics["cka_drift"] = 0.0
+
     # Cluster separability
     n_clusters = min(10, flat_latents.shape[0] // 2)
     if n_clusters >= 2:
@@ -487,7 +528,8 @@ def run_single_seed(seed: int, model_type: str, dataset_name: str,
                     num_epochs: int, device: str, **kwargs) -> Dict[str, Any]:
     """Run experiment with a single seed."""
     logger.info(f"\n{'='*60}")
-    logger.info(f"Running {model_type} with seed={seed}")
+    dataset_name = normalize_dataset_name(dataset_name)
+    logger.info(f"Running {model_type} on {dataset_name} with seed={seed}")
     logger.info(f"{'='*60}")
     
     set_seed(seed)
@@ -522,6 +564,13 @@ def run_single_seed(seed: int, model_type: str, dataset_name: str,
     
     # Evaluate
     results = evaluate_model(model, test_loader, device, is_lfn=is_lfn, model_type=model_type)
+    rep_metrics = results.get("representation_metrics", {})
+    horizons = kwargs.get("horizons", [1, 2, 5])
+    cka_drift = float(rep_metrics.get("cka_drift", 0.0))
+    results["dataset"] = dataset_slug(dataset_name)
+    results["horizon_set_K"] = horizons
+    results["eff_dim"] = float(rep_metrics.get("effective_dim", 0.0))
+    results["cka_drift"] = cka_drift
     results["seed"] = seed
     results["num_parameters"] = count_parameters(model)
     results["training_history"] = history
@@ -611,6 +660,7 @@ def aggregate_results(all_results: List[Dict[str, Any]]) -> Dict[str, Any]:
 def run_baseline_comparison(seeds: List[int], dataset_name: str, 
                             num_epochs: int, device: str) -> Dict[str, Any]:
     """Run baseline vs LFN comparison with multiple seeds."""
+    dataset_name = normalize_dataset_name(dataset_name)
     results = {
         "baseline": [],
         "lfn": [],
@@ -638,6 +688,7 @@ def run_baseline_comparison(seeds: List[int], dataset_name: str,
 def run_lambda_ablation(seeds: List[int], dataset_name: str, 
                         num_epochs: int, device: str) -> Dict[str, Any]:
     """Run lambda ablation with multiple seeds."""
+    dataset_name = normalize_dataset_name(dataset_name)
     lambda_values = [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0]
     results = {}
     
@@ -662,6 +713,7 @@ def run_lambda_ablation(seeds: List[int], dataset_name: str,
 def run_horizon_ablation(seeds: List[int], dataset_name: str, 
                          num_epochs: int, device: str) -> Dict[str, Any]:
     """Run horizon ablation with multiple seeds."""
+    dataset_name = normalize_dataset_name(dataset_name)
     horizon_configs = [
         [1],
         [2],
@@ -694,6 +746,7 @@ def run_horizon_ablation(seeds: List[int], dataset_name: str,
 def run_baseline_model_comparison(seeds: List[int], dataset_name: str,
                                   num_epochs: int, device: str) -> Dict[str, Any]:
     """Run comparison of all models: Baseline, CPC, JEPA, LFN."""
+    dataset_name = normalize_dataset_name(dataset_name)
     model_types = ["baseline", "cpc", "jepa", "lfn"]
     results = {}
     
@@ -810,14 +863,15 @@ def main():
                        help="Number of training epochs (default: 3)")
     parser.add_argument("--device", type=str, default="auto",
                        help="Device to use (auto/cpu/cuda/mps)")
-    parser.add_argument("--dataset", type=str, default="wikitext-2",
-                       choices=["wikitext-2", "wikitext-103", "tinystories"],
+    parser.add_argument("--dataset", type=str, default="wikitext",
+                       choices=["wikitext", "ptb", "wikitext-2", "wikitext-103", "tinystories"],
                        help="Dataset to use")
     parser.add_argument("--output", type=str, default="experiments/results/multi_seed",
                        help="Output directory for results")
     parser.add_argument("--max-batches", type=int, default=500,
                        help="Max batches per epoch for faster testing")
     args = parser.parse_args()
+    args.dataset = normalize_dataset_name(args.dataset)
     
     device = resolve_device(args.device)
     logger.info(f"Device: {device}")
@@ -856,7 +910,7 @@ def main():
     elif args.experiment == "dataset_scale":
         # Run on multiple datasets
         all_results = {}
-        for dataset in ["wikitext-2", "tinystories"]:
+        for dataset in ["wikitext-2", "ptb", "tinystories"]:
             logger.info(f"\n{'='*60}")
             logger.info(f"Dataset: {dataset}")
             logger.info(f"{'='*60}")
@@ -871,7 +925,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Create filename
-    exp_name = f"{args.experiment}_{args.dataset}_{args.seeds}seeds"
+    exp_name = f"{args.experiment}_{dataset_slug(args.dataset)}_{args.seeds}seeds"
     results_path = output_dir / f"{exp_name}.json"
     
     # Convert to JSON-serializable format

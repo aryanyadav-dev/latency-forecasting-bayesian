@@ -47,8 +47,8 @@ class SequenceDataset(Dataset):
         
         Args:
             dataset_name: Name of HuggingFace dataset
-                         ('wikitext-2-raw-v1', 'wikitext-103-raw-v1', 
-                          'roneneldan/TinyStories', 'openwebtext')
+                         ('wikitext-2-raw-v1', 'wikitext-103-raw-v1',
+                          'ptb', 'roneneldan/TinyStories', 'openwebtext')
             split: Dataset split ('train', 'validation', 'test')
             tokenizer: HuggingFace tokenizer instance
             context_length: Length of each sequence
@@ -102,7 +102,12 @@ class SequenceDataset(Dataset):
         # Map common dataset names to HuggingFace identifiers
         dataset_mapping = {
             'wikitext-2': 'wikitext',
+            'wikitext': 'wikitext',
             'wikitext-103': 'wikitext',
+            'ptb': 'ptb_text_only',
+            'penn-treebank': 'ptb_text_only',
+            'penn_treebank': 'ptb_text_only',
+            'ptb_text_only': 'ptb_text_only',
             'tinystories': 'roneneldan/TinyStories',
             'openwebtext': 'openwebtext'
         }
@@ -115,6 +120,8 @@ class SequenceDataset(Dataset):
                     config_name = 'wikitext-103-raw-v1'
                 else:
                     config_name = 'wikitext-2-raw-v1'
+            elif hf_dataset_name == 'ptb_text_only':
+                config_name = 'penn_treebank'
             else:
                 config_name = None
         else:
@@ -538,6 +545,5 @@ def collate_batch_with_padding(
         'labels': padded_labels,
         'attention_mask': attention_mask
     }
-
 
 

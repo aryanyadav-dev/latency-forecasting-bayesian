@@ -10,6 +10,7 @@ Produces:
 
 import json
 import os
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -23,6 +24,11 @@ import numpy as np
 OUT_DIR = Path("experiments/results/paper_figures")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+AGGREGATE_PATHS = {
+    "wikitext": Path("experiments/results/paper_horizon_rerun/aggregate.json"),
+    "ptb": Path("experiments/results/ptb_horizon_rerun/aggregate_ptb.json"),
+}
+
 # Color palette
 C_BLUE    = "#2563EB"
 C_GREEN   = "#059669"
@@ -32,6 +38,65 @@ C_ORANGE  = "#EA580C"
 C_GRAY    = "#6B7280"
 C_DARK    = "#1F2937"
 C_LIGHT   = "#F3F4F6"
+
+DATASET_COLORS = {
+    "wikitext": C_PURPLE,
+    "ptb": C_GREEN,
+}
+
+
+STATIC_HORIZON_RECORDS = [
+    {"label": r"$\{1\}$", "horizons": [1], "psi": 0.667, "effdim": 149.0, "effdim_std": 3.8, "diversity": 1.0},
+    {"label": r"$\{2\}$", "horizons": [2], "psi": 0.500, "effdim": 152.6, "effdim_std": 4.1, "diversity": 0.5},
+    {"label": r"$\{5\}$", "horizons": [5], "psi": 0.286, "effdim": 152.8, "effdim_std": 4.3, "diversity": 0.2},
+    {"label": r"$\{10\}$", "horizons": [10], "psi": 0.167, "effdim": 149.2, "effdim_std": 3.9, "diversity": 0.1},
+    {"label": r"$\{1,2\}$", "horizons": [1, 2], "psi": 1.167, "effdim": 153.1, "effdim_std": 3.9, "diversity": 1.0},
+    {"label": r"$\{1,2,5\}$", "horizons": [1, 2, 5], "psi": 1.452, "effdim": 155.3, "effdim_std": 4.2, "diversity": 0.6},
+    {"label": r"$\{1,2,5,10\}$", "horizons": [1, 2, 5, 10], "psi": 1.619, "effdim": 159.1, "effdim_std": 4.5, "diversity": 0.4},
+    {"label": r"$\{1,3,5,10,20\}$", "horizons": [1, 3, 5, 10, 20], "psi": 1.610, "effdim": 166.5, "effdim_std": 5.0, "diversity": 0.25},
+]
+
+
+def format_horizon_label(horizons):
+    return "$\\{" + ",".join(str(h) for h in horizons) + "\\}$"
+
+
+def load_horizon_records(dataset_name, aggregate_path):
+    """Load multi-seed horizon aggregates when available."""
+    if not aggregate_path or not aggregate_path.exists():
+        return None
+
+    payload = json.loads(aggregate_path.read_text())
+    raw_results = payload.get("results", {})
+    records = []
+    for row in raw_results.values():
+        horizons = row.get("horizons")
+        if horizons is None:
+            continue
+        eff = row.get("effective_dimensionality", {})
+        records.append(
+            {
+                "dataset": dataset_name,
+                "label": format_horizon_label(horizons),
+                "horizons": horizons,
+                "psi": float(row.get("psi_K", 0.0)),
+                "effdim": float(eff.get("mean", row.get("effdim", 0.0))),
+                "effdim_std": float(eff.get("std", 0.0)),
+                "diversity": float(row.get("diversity", 0.0)),
+            }
+        )
+    return records or None
+
+
+def get_horizon_series():
+    series = {}
+    loaded_wikitext = load_horizon_records("wikitext", AGGREGATE_PATHS.get("wikitext"))
+    series["wikitext"] = loaded_wikitext or [dict(r, dataset="wikitext") for r in STATIC_HORIZON_RECORDS]
+
+    loaded_ptb = load_horizon_records("ptb", AGGREGATE_PATHS.get("ptb"))
+    if loaded_ptb:
+        series["ptb"] = loaded_ptb
+    return series
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -205,14 +270,9 @@ def draw_4panel():
     probe_mean = [0.524, 0.528, 0.534, 0.542, 0.537, 0.519, 0.498]
     probe_std  = [0.008, 0.009, 0.008, 0.007, 0.009, 0.011, 0.013]
 
-    # Horizon configs for panel (d)
-    horizon_labels = [r"$\{1\}$", r"$\{2\}$", r"$\{5\}$",
-                      r"$\{1,2\}$", r"$\{1,2,5\}$",
-                      r"$\{1,2,5,10\}$", r"$\{1,3,5,10,20\}$"]
-    horizon_K_size = [1, 1, 1, 2, 3, 4, 5]
-    horizon_effdim_mean = [149.0, 152.6, 152.8, 153.1, 155.3, 159.1, 166.5]
-    horizon_effdim_std  = [3.8,   4.1,   4.3,   3.9,   4.2,   4.5,   5.0]
-    horizon_psi = [0.667, 0.500, 0.286, 1.167, 1.452, 1.619, 1.610]
+    horizon_series = get_horizon_series()
+    horizon_labels = [r["label"] for r in horizon_series["wikitext"]]
+    horizon_psi = [r["psi"] for r in horizon_series["wikitext"]]
 
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
     fig.subplots_adjust(hspace=0.35, wspace=0.3)
@@ -269,9 +329,24 @@ def draw_4panel():
     ax2 = ax.twinx()
 
     x_pos = np.arange(len(horizon_labels))
-    bars = ax.bar(x_pos, horizon_effdim_mean, yerr=horizon_effdim_std,
-                  width=0.5, color=C_PURPLE, alpha=0.7,
-                  capsize=3, ecolor=C_DARK, label="EffDim (left)")
+    width = 0.34 if len(horizon_series) > 1 else 0.5
+    offsets = np.linspace(-width / 2, width / 2, len(horizon_series)) if len(horizon_series) > 1 else [0.0]
+    for offset, (dataset_name, records) in zip(offsets, horizon_series.items()):
+        means = [r["effdim"] for r in records]
+        stds = [r.get("effdim_std", 0.0) for r in records]
+        labels = [r["label"] for r in records]
+        local_x = np.array([horizon_labels.index(label) for label in labels])
+        ax.bar(
+            local_x + offset,
+            means,
+            yerr=stds,
+            width=width,
+            color=DATASET_COLORS.get(dataset_name, C_PURPLE),
+            alpha=0.72,
+            capsize=3,
+            ecolor=C_DARK,
+            label=f"{dataset_name.title()} EffDim",
+        )
     ax2.plot(x_pos, horizon_psi, "^--", color=C_ORANGE, linewidth=2,
              markersize=8, label=r"$\psi(\mathcal{K})$ (right)")
 
@@ -370,12 +445,100 @@ def draw_eigenvalue_spectrum():
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Figure 5: Horizon theory overlay with optional PTB comparison
+# ═══════════════════════════════════════════════════════════════════════
+
+def draw_psi_overlay():
+    horizon_series = get_horizon_series()
+    baseline_effdim = {
+        dataset_name: min(record["effdim"] for record in records)
+        for dataset_name, records in horizon_series.items()
+    }
+
+    fig, ax = plt.subplots(figsize=(8.6, 6.4))
+    all_psi = []
+    all_delta = []
+
+    for dataset_name, records in horizon_series.items():
+        records = sorted(records, key=lambda item: item["psi"])
+        psi = np.array([r["psi"] for r in records], dtype=float)
+        delta = np.array([r["effdim"] - baseline_effdim[dataset_name] for r in records], dtype=float)
+        std = np.array([r.get("effdim_std", 0.0) for r in records], dtype=float)
+        sizes = np.array([90 + 40 * len(r["horizons"]) for r in records], dtype=float)
+        color = DATASET_COLORS.get(dataset_name, C_BLUE)
+
+        ax.errorbar(
+            psi,
+            delta,
+            yerr=std,
+            fmt="none",
+            ecolor=color,
+            alpha=0.45,
+            capsize=3,
+            zorder=2,
+        )
+        ax.scatter(
+            psi,
+            delta,
+            s=sizes,
+            color=color,
+            alpha=0.82,
+            edgecolors="white",
+            linewidths=0.8,
+            label=dataset_name.title(),
+            zorder=3,
+        )
+        for record, x_val, y_val in zip(records, psi, delta):
+            ax.annotate(
+                record["label"],
+                (x_val, y_val),
+                textcoords="offset points",
+                xytext=(6, 6),
+                fontsize=8,
+                color=C_DARK,
+            )
+        all_psi.extend(psi.tolist())
+        all_delta.extend(delta.tolist())
+
+    all_psi_arr = np.array(all_psi, dtype=float)
+    all_delta_arr = np.array(all_delta, dtype=float)
+    if all_psi_arr.size:
+        slope = float((all_psi_arr @ all_delta_arr) / max(all_psi_arr @ all_psi_arr, 1e-12))
+        x_fit = np.linspace(0.0, all_psi_arr.max() * 1.08, 200)
+        ax.plot(
+            x_fit,
+            slope * x_fit,
+            "--",
+            color=C_RED,
+            lw=2.0,
+            label=rf"Proportional fit: $\Delta d_{{eff}} \approx {slope:.2f}\,\psi(\mathcal{{K}})$",
+            zorder=1,
+        )
+
+    ax.set_title("Theory Overlay: $\\psi(\\mathcal{K})$ vs. EffDim Gain", fontweight="bold")
+    ax.set_xlabel(r"Theoretical multi-horizon factor $\psi(\mathcal{K})$")
+    ax.set_ylabel(r"Effective-dimensionality gain $\Delta d_{\mathrm{eff}}$")
+    ax.legend(loc="upper left", framealpha=0.9)
+    fig.savefig(OUT_DIR / "fig5_psi_overlay.png")
+    plt.close(fig)
+    print(f"  ✓ Saved {OUT_DIR / 'fig5_psi_overlay.png'}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate paper figures.")
+    parser.add_argument("--wikitext-results", type=str, default=str(AGGREGATE_PATHS["wikitext"]))
+    parser.add_argument("--ptb-results", type=str, default=str(AGGREGATE_PATHS["ptb"]))
+    args = parser.parse_args()
+    AGGREGATE_PATHS["wikitext"] = Path(args.wikitext_results)
+    AGGREGATE_PATHS["ptb"] = Path(args.ptb_results)
+
     print("Generating paper figures …")
     draw_pgm()
     draw_4panel()
     draw_eigenvalue_spectrum()
+    draw_psi_overlay()
     print(f"\nAll figures saved to {OUT_DIR}/")

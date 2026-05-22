@@ -117,7 +117,15 @@ def _validate_data_config(config: Dict[str, Any]) -> None:
             raise ValueError(f"Missing required data config field: {field}")
     
     # Validate dataset name
-    valid_datasets = ['wikitext-2', 'wikitext-103', 'tinystories', 'openwebtext']
+    valid_datasets = [
+        'wikitext',
+        'wikitext-2',
+        'wikitext-103',
+        'ptb',
+        'ptb_text_only',
+        'tinystories',
+        'openwebtext',
+    ]
     if config['dataset_name'] not in valid_datasets:
         raise ValueError(
             f"Invalid dataset_name: {config['dataset_name']}. "

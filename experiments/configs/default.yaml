@@ -17,7 +17,7 @@ model:
   max_context_length: 512
 
 data:
-  dataset_name: "wikitext-2-raw-v1"
+  dataset_name: "wikitext"
   tokenizer_name: "gpt2"
   context_length: 512
   stride: 256

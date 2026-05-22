@@ -1,0 +1,44 @@
+# Penn Treebank configuration matching the WikiText-2 experiment shape.
+
+experiment:
+  name: "lfn_ptb_default"
+  seed: 42
+  output_dir: "experiments/results/ptb"
+
+model:
+  vocab_size: 50257
+  latent_dim: 256
+  num_layers: 4
+  num_heads: 4
+  hidden_dim: 1024
+  dropout: 0.1
+  forecast_horizons: [1, 2, 5]
+  max_context_length: 256
+
+data:
+  dataset_name: "ptb"
+  tokenizer_name: "gpt2"
+  context_length: 256
+  stride: 128
+  batch_size: 8
+  num_workers: 0
+
+training:
+  num_epochs: 3
+  batch_size: 8
+  learning_rate: 3e-4
+  weight_decay: 0.01
+  gradient_accumulation_steps: 4
+  max_grad_norm: 1.0
+  warmup_steps: 200
+  lambda_latent: 0.1
+  use_mixed_precision: false
+  checkpoint_every: 500
+  log_every: 10
+  device: "auto"
+
+evaluation:
+  batch_size: 8
+  compute_lps: true
+  compute_representation_metrics: true
+  generate_visualizations: true

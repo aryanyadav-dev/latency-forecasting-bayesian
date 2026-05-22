@@ -26,9 +26,9 @@ os.environ["HF_HOME"] = str(HF_CACHE_DIR)
 os.environ["HF_DATASETS_CACHE"] = str(HF_CACHE_DIR / "datasets")
 os.environ["HUGGINGFACE_HUB_CACHE"] = str(HF_CACHE_DIR / "hub")
 os.environ["TRANSFORMERS_CACHE"] = str(HF_CACHE_DIR / "transformers")
-os.environ["HF_DATASETS_OFFLINE"] = "1"
-os.environ["HUGGINGFACE_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ.setdefault("HF_DATASETS_OFFLINE", "0")
+os.environ.setdefault("HUGGINGFACE_HUB_OFFLINE", "0")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "0")
 os.environ["MPLCONFIGDIR"] = str(CACHE_DIR / "matplotlib")
 os.environ["XDG_CACHE_HOME"] = str(CACHE_DIR)
 
@@ -61,6 +61,26 @@ HORIZON_CONFIGS = [
     [1, 2, 5, 10],
     [1, 3, 5, 10, 20],
 ]
+
+
+DATASET_ALIASES = {
+    "wikitext": "wikitext-2",
+    "wikitext-2": "wikitext-2",
+    "ptb": "ptb",
+    "ptb_text_only": "ptb",
+}
+
+
+def normalize_dataset_name(dataset_name: str) -> str:
+    try:
+        return DATASET_ALIASES[dataset_name.lower()]
+    except KeyError as exc:
+        valid = ", ".join(sorted(DATASET_ALIASES))
+        raise ValueError(f"Unknown dataset '{dataset_name}'. Expected one of: {valid}") from exc
+
+
+def dataset_slug(dataset_name: str) -> str:
+    return "wikitext" if dataset_name == "wikitext-2" else dataset_name.replace("-", "_")
 
 
 @dataclass
@@ -173,6 +193,27 @@ def compute_psi(horizons: list[int], alpha: float = 0.5) -> float:
     return float(sum(1.0 / (1.0 + alpha * k) for k in horizons))
 
 
+def compute_temporal_cka_drift(sequence_reps: torch.Tensor, max_points: int = 5000) -> float:
+    """Return 1 - linear CKA between adjacent latent time steps."""
+    if sequence_reps.ndim != 3 or sequence_reps.size(1) < 2:
+        return 0.0
+    x = sequence_reps[:, :-1, :].reshape(-1, sequence_reps.size(-1)).float()
+    y = sequence_reps[:, 1:, :].reshape(-1, sequence_reps.size(-1)).float()
+    if x.size(0) > max_points:
+        x = x[:max_points]
+        y = y[:max_points]
+    x = x - x.mean(dim=0, keepdim=True)
+    y = y - y.mean(dim=0, keepdim=True)
+    numerator = torch.linalg.matrix_norm(x.T @ y, ord="fro") ** 2
+    denominator = (
+        torch.linalg.matrix_norm(x.T @ x, ord="fro")
+        * torch.linalg.matrix_norm(y.T @ y, ord="fro")
+    )
+    if denominator.item() <= 1e-12:
+        return 0.0
+    return float(1.0 - (numerator / denominator).clamp(0.0, 1.0).item())
+
+
 def model_and_training_config(cfg: RunConfig, horizons: list[int], device: str, seed: int) -> tuple[ModelConfig, TrainingConfig]:
     model_cfg = ModelConfig(
         vocab_size=50257,
@@ -243,7 +284,7 @@ def evaluate_horizon_model(
     cfg: RunConfig,
     device: str,
 ) -> dict:
-    reps, _ = extract_all_representations(model, test_loader, device)
+    reps, sequence_reps = extract_all_representations(model, test_loader, device)
     evaluator = Evaluator(model, device=device, compute_accuracy=True)
     eval_results = evaluator.evaluate_model(test_loader, include_representation_analysis=True)
     probe_acc = compute_probe_accuracy(
@@ -256,14 +297,20 @@ def evaluate_horizon_model(
         num_epochs=cfg.probe_num_epochs,
         learning_rate=cfg.probe_learning_rate,
     )
+    cosine_drift = float(
+        eval_results.get("representation_metrics", {}).get("cosine_similarity_drift", 0.0)
+    )
+    cka_drift = compute_temporal_cka_drift(sequence_reps)
     return {
+        "dataset": dataset_slug(cfg.dataset_name),
+        "horizon_set_K": horizons,
         "horizons": horizons,
         "diversity": compute_diversity(horizons),
         "psi_K": compute_psi(horizons),
+        "eff_dim": float(compute_effective_dimensionality(reps)),
         "effective_dimensionality": float(compute_effective_dimensionality(reps)),
-        "cosine_drift": float(
-            eval_results.get("representation_metrics", {}).get("cosine_similarity_drift", 0.0)
-        ),
+        "cka_drift": cka_drift,
+        "cosine_drift": cosine_drift,
         "perplexity": float(eval_results.get("perplexity", 0.0)),
         "linear_probe_accuracy": probe_acc,
     }
@@ -361,6 +408,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--probe-val-limit", type=int, default=None)
     parser.add_argument("--probe-test-limit", type=int, default=None)
     parser.add_argument("--num-epochs", type=int, default=3)
+    parser.add_argument("--dataset", type=str, default="wikitext", choices=["wikitext", "ptb"])
     return parser.parse_args()
 
 
@@ -376,6 +424,7 @@ def parse_only_horizons(values: list[str] | None) -> list[list[int]] | None:
 def main() -> None:
     args = parse_args()
     cfg = RunConfig(
+        dataset_name=normalize_dataset_name(args.dataset),
         num_epochs=args.num_epochs,
         probe_train_limit=args.probe_train_limit,
         probe_val_limit=args.probe_val_limit,
