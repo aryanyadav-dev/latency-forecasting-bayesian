@@ -101,13 +101,13 @@ class SequenceDataset(Dataset):
         """
         # Map common dataset names to HuggingFace identifiers
         dataset_mapping = {
-            'wikitext-2': 'wikitext',
-            'wikitext': 'wikitext',
-            'wikitext-103': 'wikitext',
-            'ptb': 'ptb_text_only',
-            'penn-treebank': 'ptb_text_only',
-            'penn_treebank': 'ptb_text_only',
-            'ptb_text_only': 'ptb_text_only',
+            'wikitext-2': 'Salesforce/wikitext',
+            'wikitext': 'Salesforce/wikitext',
+            'wikitext-103': 'Salesforce/wikitext',
+            'ptb': 'ptb-text-only/ptb_text_only',
+            'penn-treebank': 'ptb-text-only/ptb_text_only',
+            'penn_treebank': 'ptb-text-only/ptb_text_only',
+            'ptb_text_only': 'ptb-text-only/ptb_text_only',
             'tinystories': 'roneneldan/TinyStories',
             'openwebtext': 'openwebtext'
         }
@@ -120,7 +120,7 @@ class SequenceDataset(Dataset):
                     config_name = 'wikitext-103-raw-v1'
                 else:
                     config_name = 'wikitext-2-raw-v1'
-            elif hf_dataset_name == 'ptb_text_only':
+            elif hf_dataset_name == 'ptb-text-only/ptb_text_only':
                 config_name = 'penn_treebank'
             else:
                 config_name = None
@@ -545,5 +545,3 @@ def collate_batch_with_padding(
         'labels': padded_labels,
         'attention_mask': attention_mask
     }
-
-
