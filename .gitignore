@@ -86,6 +86,7 @@ docs/_build/
 RESEARCH_PAPER.tex
 RESEARCH_PAPER.pdf
 RESEARCH.md
+RESEARCH_PAPER_EXPLAINED_SIMPLE.md
 *.tex
 *.bbl
 *.blg
